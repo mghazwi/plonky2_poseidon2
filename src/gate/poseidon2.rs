@@ -525,7 +525,8 @@ mod tests {
     use plonky2::iop::witness::{PartialWitness, Witness, WitnessWrite};
     use plonky2::plonk::circuit_builder::CircuitBuilder;
     use plonky2::plonk::circuit_data::CircuitConfig;
-    use crate::config::{GenericConfig, Poseidon2GoldilocksConfig};
+    use plonky2::plonk::config::GenericConfig;
+    use crate::config::Poseidon2GoldilocksConfig;
 
     #[test]
     fn wire_indices() {
@@ -557,7 +558,13 @@ mod tests {
         let row = builder.add_gate(gate, vec![]);
         let circuit = builder.build_prover::<C>();
 
+        println!("width = {}", WIDTH);
+
         let permutation_inputs = (0..WIDTH).map(F::from_canonical_usize).collect::<Vec<_>>();
+
+        for i in 0..WIDTH {
+            println!("out {} = {}", i, permutation_inputs[i].clone());
+        }
 
         let mut inputs = PartialWitness::new();
         inputs.set_wire(
@@ -585,6 +592,7 @@ mod tests {
                 row: 0,
                 column: Gate::wire_output(i),
             });
+            println!("out {} = {}", i, out.clone());
             assert_eq!(out, expected_outputs[i]);
         }
     }
