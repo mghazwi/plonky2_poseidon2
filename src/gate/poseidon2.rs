@@ -1,10 +1,3 @@
-// #[cfg(not(feature = "std"))]
-// use alloc::{
-//     format,
-//     string::{String, ToString},
-//     vec,
-//     vec::Vec,
-// };
 use core::marker::PhantomData;
 use anyhow::Result;
 use plonky2_field::extension::Extendable;

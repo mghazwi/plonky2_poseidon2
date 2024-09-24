@@ -1,19 +1,14 @@
 //! Implementation of the Poseidon2 hash function, as described in
 //! https://eprint.iacr.org/2023/323.pdf
 //!
-//! based on OlaVM at https://github.com/Sin7Y/olavm/blob/main/plonky2/plonky2/src/hash/poseidon2.rs
-//!
-// #[cfg(not(feature = "std"))]
-// use alloc::vec;
-use core::fmt::Debug;
 
+use core::fmt::Debug;
 use plonky2_field::extension::{Extendable, FieldExtension};
 use plonky2_field::types::{Field, PrimeField64};
 use unroll::unroll_for_loops;
 
 use crate::gate::poseidon2::Poseidon2Gate;
 use plonky2::hash::hash_types::{HashOut, RichField};
-// use crate::poseidon2_hash::RichField;
 use plonky2::hash::hashing::{compress, hash_n_to_hash_no_pad, PlonkyPermutation};
 use plonky2::iop::ext_target::ExtensionTarget;
 use plonky2::iop::target::{BoolTarget, Target};
@@ -31,7 +26,7 @@ pub const ROUND_F_BEGIN: usize = 4;
 pub const ROUND_F_END: usize = 2 * ROUND_F_BEGIN;
 pub const ROUND_P: usize = 22;
 pub const ROUNDS: usize = ROUND_F_END + ROUND_P;
-pub const WIDTH: usize = 12; // we only have width 8 and 12, and 12 is bigger. :)
+pub const WIDTH: usize = 12; // we only have 12
 
 pub trait Poseidon2: PrimeField64 {
     const MAT_DIAG12_M_1: [u64; WIDTH];
@@ -76,7 +71,7 @@ pub trait Poseidon2: PrimeField64 {
             current_state[0] += Self::from_canonical_u64(Self::RC12_MID[r]);
             // t_1 = t_0^7
             current_state[0] = Self::sbox_monomial(current_state[0]);
-            // M_I * t_1
+            // // M_I * t_1
             Self::matmul_internal(&mut current_state, &Self::MAT_DIAG12_M_1);
         }
 
@@ -93,8 +88,9 @@ pub trait Poseidon2: PrimeField64 {
     #[inline]
     #[unroll_for_loops]
     fn constant_layer(state: &mut [Self; WIDTH], round_ctr: usize) {
+        let ofs = round_ctr * WIDTH;
         for i in 0..WIDTH {
-            let round_constant = Self::RC12[round_ctr + i];
+            let round_constant = Self::RC12[ofs + i];
             unsafe {
                 state[i] = state[i].add_canonical_u64(round_constant);
             }
@@ -170,7 +166,7 @@ pub trait Poseidon2: PrimeField64 {
 
         // Add sum + diag entry * element to each element
         for i in 0..WIDTH {
-            let mat_internal_diag = mat_internal_diag_m_1[i] - 1;
+            let mat_internal_diag = mat_internal_diag_m_1[i];
             let mut multi = (mat_internal_diag as u128) * state[i];
             multi += sum;
             input[i] = Self::from_noncanonical_u128(multi);
@@ -191,46 +187,19 @@ pub trait Poseidon2: PrimeField64 {
 
             t_1 = t_1.add(input[start_index + 3]);
             let mut t_2 = t_1;
-            // let mut t_2 = input[start_index + 1];
-            //t_2 *= Self::from_canonical_u8(2);
-            //t_2 = t_2.add(t_2);
-            //t_2 = t_2.add(t_1);
-            t_2 = t_2.multiply_accumulate(input[start_index + 1], Self::TWO);
-            //t_2 += t_1;
-            //let mut t_3 = input[start_index + 3];
-            let mut t_3 = t_0;
-            //t_3 *= Self::from_canonical_u8(2);
-            //t_3 += t_0;
-            //t_3 = t_3.add(t_3);
-            //t_3 = t_3.add(t_0);
-            t_3 = t_3.multiply_accumulate(input[start_index + 3], Self::TWO);
-            //let mut t_4 = t_1;
-            let mut t_4 = t_3;
-            //t_4 *= (F::from_canonical_u8(2));
-            //t_4 *= (F::from_canonical_u8(2));
-            //t_4 *= Self::from_canonical_u8(4);
-            //t_4 = t_4.add(t_4);
-            //t_4 = t_4.add(t_4);
-            //t_4 = t_4.add(t_3);
-            t_4 = t_4.multiply_accumulate(t_1, Self::TWO.double());
-            //t_4 += t_3;
-            //let mut t_5 = t_0;
-            let mut t_5 = t_2;
-            //t_5 *= (F::from_canonical_u8(2));
-            //t_5 *= (F::from_canonical_u8(2));
-            //t_5 *= Self::from_canonical_u8(4);
-            //t_5 += t_2;
-            //t_5 = t_5.add(t_5);
-            //t_5 = t_5.add(t_5);
-            //t_5 = t_5.add(t_2);
-            t_5 = t_5.multiply_accumulate(t_0, Self::TWO.double());
 
-            //let mut t_6 = t_3;
-            //t_6 += t_5;
-            //t_6 = t_6.add(t_5);
-            //let mut t_7 = t_2;
-            //t_7 += t_4;
-            //t_7 = t_7.add(t_4);
+            t_2 = t_2.multiply_accumulate(input[start_index + 1], Self::TWO);
+
+            let mut t_3 = t_0;
+
+            t_3 = t_3.multiply_accumulate(input[start_index + 3], Self::TWO);
+            let mut t_4 = t_3;
+
+            t_4 = t_4.multiply_accumulate(t_1, Self::TWO.double());
+
+            let mut t_5 = t_2;
+
+            t_5 = t_5.multiply_accumulate(t_0, Self::TWO.double());
 
             input[start_index] = t_3.add(t_5);
             input[start_index + 1] = t_5;
@@ -266,16 +235,6 @@ pub trait Poseidon2: PrimeField64 {
         input: &mut [F],
         mat_internal_diag_m_1: &[u64],
     ) {
-        //let t: usize = WIDTH;
-
-        /*// Compute input sum
-        let mut sum = input[0];
-        input
-            .iter()
-            .skip(1)
-            .take(t-1)
-            .for_each(|el| sum += (*el));
-        */
         //Compute input sum
         let mut sum = input[0];
         for i in 1..WIDTH {
@@ -283,7 +242,7 @@ pub trait Poseidon2: PrimeField64 {
         }
         // Add sum + diag entry * element to each element
         for i in 0..WIDTH {
-            input[i] *= F::from_canonical_u64(mat_internal_diag_m_1[i] - 1);
+            input[i] *= F::from_canonical_u64(mat_internal_diag_m_1[i]);
             input[i] += sum;
         }
     }
@@ -307,46 +266,19 @@ pub trait Poseidon2: PrimeField64 {
 
             t_1 = t_1.add(input[start_index + 3]);
             let mut t_2 = t_1;
-            // let mut t_2 = input[start_index + 1];
-            //t_2 *= Self::from_canonical_u8(2);
-            //t_2 = t_2.add(t_2);
-            //t_2 = t_2.add(t_1);
-            t_2 = t_2.multiply_accumulate(input[start_index + 1], F::TWO);
-            //t_2 += t_1;
-            //let mut t_3 = input[start_index + 3];
-            let mut t_3 = t_0;
-            //t_3 *= Self::from_canonical_u8(2);
-            //t_3 += t_0;
-            //t_3 = t_3.add(t_3);
-            //t_3 = t_3.add(t_0);
-            t_3 = t_3.multiply_accumulate(input[start_index + 3], F::TWO);
-            //let mut t_4 = t_1;
-            let mut t_4 = t_3;
-            //t_4 *= (F::from_canonical_u8(2));
-            //t_4 *= (F::from_canonical_u8(2));
-            //t_4 *= Self::from_canonical_u8(4);
-            //t_4 = t_4.add(t_4);
-            //t_4 = t_4.add(t_4);
-            //t_4 = t_4.add(t_3);
-            t_4 = t_4.multiply_accumulate(t_1, F::TWO.double());
-            //t_4 += t_3;
-            //let mut t_5 = t_0;
-            let mut t_5 = t_2;
-            //t_5 *= (F::from_canonical_u8(2));
-            //t_5 *= (F::from_canonical_u8(2));
-            //t_5 *= Self::from_canonical_u8(4);
-            //t_5 += t_2;
-            //t_5 = t_5.add(t_5);
-            //t_5 = t_5.add(t_5);
-            //t_5 = t_5.add(t_2);
-            t_5 = t_5.multiply_accumulate(t_0, F::TWO.double());
 
-            //let mut t_6 = t_3;
-            //t_6 += t_5;
-            //t_6 = t_6.add(t_5);
-            //let mut t_7 = t_2;
-            //t_7 += t_4;
-            //t_7 = t_7.add(t_4);
+            t_2 = t_2.multiply_accumulate(input[start_index + 1], F::TWO);
+
+            let mut t_3 = t_0;
+
+            t_3 = t_3.multiply_accumulate(input[start_index + 3], F::TWO);
+            let mut t_4 = t_3;
+
+            t_4 = t_4.multiply_accumulate(t_1, F::TWO.double());
+
+            let mut t_5 = t_2;
+
+            t_5 = t_5.multiply_accumulate(t_0, F::TWO.double());
 
             input[start_index] = t_3.add(t_5);
             input[start_index + 1] = t_5;
@@ -359,8 +291,9 @@ pub trait Poseidon2: PrimeField64 {
         state: &mut [F; WIDTH],
         round_ctr: usize,
     ) {
+        let ofs = round_ctr * WIDTH;
         for i in 0..WIDTH {
-            let round_constant = Self::RC12[round_ctr + i];
+            let round_constant = Self::RC12[ofs + i];
             state[i] += F::from_canonical_u64(round_constant);
         }
     }
@@ -439,8 +372,9 @@ pub trait Poseidon2: PrimeField64 {
     ) where
         Self: RichField + Extendable<D>,
     {
+        let ofs = rc_index * WIDTH;
         for i in 0..WIDTH {
-            let round_constant = Self::Extension::from_canonical_u64(Self::RC12[rc_index + i]);
+            let round_constant = Self::Extension::from_canonical_u64(Self::RC12[ofs + i]);
             let round_constant = builder.constant_extension(round_constant);
             input[i] = builder.add_extension(input[i], round_constant);
         }
@@ -482,7 +416,7 @@ pub trait Poseidon2: PrimeField64 {
         ]);
 
         for i in 0..WIDTH {
-            let round_constant = Self::Extension::from_canonical_u64(Self::MAT_DIAG12_M_1[i] - 1);
+            let round_constant = Self::Extension::from_canonical_u64(Self::MAT_DIAG12_M_1[i]);
             let round_constant = builder.constant_extension(round_constant);
 
             input[i] = builder.mul_add_extension(round_constant, input[i], sum);
@@ -610,8 +544,6 @@ impl<F: RichField + Poseidon2> AlgebraicHasher<F> for Poseidon2Hash {
 
 #[cfg(test)]
 pub(crate) mod test_helpers {
-    // #[cfg(not(feature = "std"))]
-    // use alloc::vec::Vec;
 
     use crate::poseidon2_hash::poseidon2::{Poseidon2, WIDTH};
 
@@ -630,6 +562,30 @@ pub(crate) mod test_helpers {
                 // println!("{:#x}", output[i].to_canonical_u64());
                 assert_eq!(output[i], ex_output);
             }
+        }
+    }
+}
+
+#[cfg(test)]
+pub(crate) mod test_consistency {
+
+    use crate::poseidon2_hash::poseidon2::{Poseidon2, WIDTH};
+    use plonky2_field::goldilocks_field::GoldilocksField as F;
+    use plonky2_field::types::Field;
+
+    #[test]
+    pub(crate) fn check_con()
+    {
+        let mut input = [F::ZERO; WIDTH];
+        for i in 0..WIDTH {
+            input[i] = F::from_canonical_u64(i as u64);
+        }
+        let output = F::poseidon2(input);
+        for i in 0..WIDTH {
+            println!("input {} = {}", i, input[i]);
+        }
+        for i in 0..WIDTH {
+            println!("out {} = {}", i, output[i]);
         }
     }
 }
