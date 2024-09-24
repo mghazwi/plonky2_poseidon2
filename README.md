@@ -3,6 +3,8 @@ WARNING: This is a work-in-progress prototype, and has not received careful code
 
 This crate is an implementation of the Poseidon2 Hash that can be employed in the [Plonky2 proving system](https://github.com/0xPolygonZero/plonky2). Poseidon2 hash function is a new zk-friendly hash function, and provides good performance.
 
+The Poseidon2 Hash implementation is consistent with that in here: https://github.com/HorizenLabs/poseidon2
+
 This crate include:
 
 - **Poseidon2 Gate**
